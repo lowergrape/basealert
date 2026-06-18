@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BaseAlert - 프로야구 빈자리(취소표) 실시간 알림 서비스. 원하는 경기와 좌석 구역을 등록하면 빈자리 발생 시 즉시 알림." />
+  <title>BaseAlert · 프로야구 빈자리 알림</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Orbitron:wght@600;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ========================================================= -->
+  <!-- 1. 로그인 / 회원가입                                        -->
+  <!-- ========================================================= -->
+  <div id="auth-screen" class="auth-screen booting">
+    <!-- (A) 콘솔 배경: 스캔라인 + 회전 레이더 -->
+    <div class="console-scanlines" aria-hidden="true"></div>
+    <svg class="console-radar" viewBox="0 0 400 400" aria-hidden="true">
+      <circle cx="200" cy="200" r="180" class="rdr-ring" />
+      <circle cx="200" cy="200" r="120" class="rdr-ring" />
+      <circle cx="200" cy="200" r="60" class="rdr-ring" />
+      <line x1="200" y1="20" x2="200" y2="380" class="rdr-cross" />
+      <line x1="20" y1="200" x2="380" y2="200" class="rdr-cross" />
+      <g class="rdr-sweep"><path d="M200 200 L200 20 A180 180 0 0 1 340 110 Z" /></g>
+    </svg>
+
+    <!-- (B) 좌상단 부팅 로그 + 우상단 LIVE 시계 -->
+    <div class="console-topline">
+      <pre class="boot-log" id="boot-log"></pre>
+      <div class="console-clock"><span class="live-dot"></span> LIVE <b id="kst-clock">--:--:--</b> KST</div>
+    </div>
+
+    <!-- (C) 중앙 마스트헤드 -->
+    <div class="console-masthead">
+      <h1 class="led-title" id="led-title"><span>B</span><span>A</span><span>S</span><span>E</span><span>A</span><span>L</span><span>E</span><span>R</span><span>T</span></h1>
+      <p class="led-sub" id="led-sub">● SYSTEM ONLINE — 전 구장 빈자리 감시 콘솔</p>
+    </div>
+
+    <!-- (D) 하단 ACCESS BAR (앞면=접속 / 뒷면=등록) -->
+    <div class="access-wrap">
+      <div class="access-flip" id="access-flip">
+        <!-- 앞면: 콘솔 접속 -->
+        <div class="access-face access-front">
+          <label class="watch-toggle" title="권한 없이 모니터만 봅니다">
+            <input type="checkbox" id="watch-only" />
+            <span class="wt-track"><span class="wt-knob"></span></span>
+            <span class="wt-label">관전 모드<br /><small>WATCH-ONLY</small></span>
+          </label>
+          <form id="login-form" class="cli-form">
+            <div class="cli-line"><span class="cli-prompt">OPERATOR_ID&nbsp;&gt;</span>
+              <input type="email" name="email" autocomplete="username" placeholder="이메일 입력" required /></div>
+            <div class="cli-line"><span class="cli-prompt">PASSKEY&nbsp;&nbsp;&nbsp;&nbsp;&gt;</span>
+              <input type="password" name="password" autocomplete="current-password" placeholder="비밀번호" required /></div>
+            <p class="auth-error" id="login-error"></p>
+            <button type="submit" class="btn-connect">▸ 콘솔 접속 <b>CONNECT</b></button>
+          </form>
+          <button type="button" class="link-reg" id="go-register">신규 오퍼레이터 등록 →</button>
+        </div>
+        <!-- 뒷면: 오퍼레이터 등록 -->
+        <div class="access-face access-back">
+          <form id="signup-form" class="cli-form">
+            <div class="cli-line"><span class="cli-prompt">EMAIL&nbsp;&nbsp;&nbsp;&gt;</span><input type="email" name="email" placeholder="you@example.com" required /></div>
+            <div class="cli-line"><span class="cli-prompt">HANDLE&nbsp;&nbsp;&gt;</span><input type="text" name="nickname" placeholder="콜사인(닉네임)" required /></div>
+            <div class="cli-line"><span class="cli-prompt">PASSKEY&nbsp;&gt;</span><input type="password" name="password" placeholder="6자 이상" minlength="6" required /></div>
+            <div class="cli-line"><span class="cli-prompt">CONFIRM&nbsp;&gt;</span><input type="password" name="passwordConfirm" placeholder="비밀번호 재입력" required /></div>
+            <p class="auth-error" id="signup-error"></p>
+            <button type="submit" class="btn-connect">▸ 오퍼레이터 등록 <b>REGISTER</b></button>
+          </form>
+          <button type="button" class="link-reg" id="back-login">← 기존 콘솔로 접속</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 숨겨진 데모 트리거(기존 핸들러 재사용) -->
+    <button id="demo-login" class="hidden" aria-hidden="true"></button>
+    <footer class="console-foot">SW 프로그래밍의 기초 · 바이브코딩 기말 과제 · BaseAlert CONTROL</footer>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- 2. 메인 앱                                                  -->
+  <!-- ========================================================= -->
+  <div id="app-screen" class="app-screen hidden">
+    <header class="sb-header">
+      <div class="sb-brand">
+        <span class="sb-logo">⚾</span>
+        <b class="led-word">BASEALERT</b>
+        <span class="live-pill" id="live-pill"><span class="live-dot"></span> ON AIR</span>
+      </div>
+      <button class="icon-btn menu-btn" id="menu-toggle" aria-label="메뉴">☰</button>
+      <nav class="nav channel-tabs" id="nav-menu">
+        <button class="nav-item active" data-view="dashboard"><span class="ch-code">01</span> 관제</button>
+        <button class="nav-item" data-view="games"><span class="ch-code">02</span> 탐색</button>
+        <button class="nav-item" data-view="alerts"><span class="ch-code">04</span> 감시</button>
+        <button class="nav-item" data-view="log"><span class="ch-code">05</span> 로그 <span class="nav-badge hidden" id="log-badge">0</span></button>
+      </nav>
+      <div class="sb-right">
+        <b class="led-mono kst" id="kst-clock2">--:--:--</b>
+        <button class="icon-btn" id="notify-btn" title="송출 로그">🔔<span class="notify-dot hidden" id="notify-dot"></span></button>
+        <div class="user-chip">
+          <div class="user-avatar" id="user-avatar">U</div>
+          <div class="user-meta">
+            <strong id="user-name">사용자</strong>
+            <small id="user-email">email</small>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn btn-ghost btn-sm">접속 종료</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="content-head">
+        <h2 class="page-title" id="page-title">관제</h2>
+      </div>
+
+      <div class="views">
+
+        <!-- 대시보드 (관제) -->
+        <section class="view active" id="view-dashboard">
+          <!-- LED 게이지 바 (통계 카드 4개 대체) -->
+          <div class="led-gauges" id="led-gauges"></div>
+          <div class="dash-ops">
+            <!-- 좌: 전 구장 빈자리 레이더 -->
+            <div class="ops-radar panel">
+              <div class="panel-head"><h3>🛰 전 구장 빈자리 레이더</h3><span class="muted led-mono" id="radar-stat">SWEEP ●</span></div>
+              <svg class="dash-radar" viewBox="0 0 400 400" id="dash-radar">
+                <circle cx="200" cy="200" r="185" class="rdr-ring" />
+                <circle cx="200" cy="200" r="130" class="rdr-ring" />
+                <circle cx="200" cy="200" r="72" class="rdr-ring" />
+                <line x1="200" y1="15" x2="200" y2="385" class="rdr-cross" />
+                <line x1="15" y1="200" x2="385" y2="200" class="rdr-cross" />
+                <g class="rdr-sweep"><path d="M200 200 L200 15 A185 185 0 0 1 345 105 Z" /></g>
+              </svg>
+            </div>
+            <!-- 우: ALERT STACK 라이브 피드 -->
+            <div class="ops-stack panel">
+              <div class="panel-head"><h3>⚡ ALERT STACK</h3><span class="live-pill"><span class="live-dot"></span> LIVE</span></div>
+              <div id="alert-stack" class="alert-stack"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 경기 검색 -->
+        <section class="view" id="view-games">
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <select id="filter-team" class="select"><option value="all">전체 팀</option></select>
+              <select id="filter-date" class="select"><option value="all">전체 날짜</option></select>
+              <select id="filter-stadium" class="select"><option value="all">전체 경기장</option></select>
+            </div>
+            <span class="muted" id="games-count"></span>
+          </div>
+          <div id="game-list" class="game-list"></div>
+        </section>
+
+        <!-- 좌석 현황 (경기 선택 시) -->
+        <section class="view" id="view-seats">
+          <button class="btn btn-ghost btn-sm back-btn" id="seats-back">← 경기 목록으로</button>
+          <div id="seats-header" class="seats-header"></div>
+          <div class="seat-legend">
+            <span><i class="dot green"></i> 판매 중</span>
+            <span><i class="dot gray"></i> 매진</span>
+            <span class="muted">· 매진 구역에 <b>알림</b>을 걸어두면 취소표가 나올 때 알려드려요</span>
+          </div>
+          <div id="seat-list" class="seat-list"></div>
+        </section>
+
+        <!-- 내 알림 -->
+        <section class="view" id="view-alerts">
+          <div class="toolbar">
+            <div class="toolbar-left"><p class="muted">감시 중인 구역에 빈자리가 발생하면 즉시 알려드립니다.</p></div>
+            <button class="btn btn-primary" data-go="games">+ 경기 찾아 알림 추가</button>
+          </div>
+          <div id="alert-list" class="alert-list"></div>
+        </section>
+
+        <!-- 알림 기록 -->
+        <section class="view" id="view-log">
+          <div class="toolbar">
+            <div class="toolbar-left"><p class="muted">빈자리가 발견되어 발송된 알림 기록입니다.</p></div>
+            <button class="btn btn-ghost btn-sm" id="clear-log">기록 비우기</button>
+          </div>
+          <div id="full-log" class="log-list"></div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- 하단 LIVE 마퀴 티커 -->
+    <div class="live-ticker" id="live-ticker">
+      <span class="lt-label">🔴 LIVE</span>
+      <div class="lt-viewport"><div class="lt-track" id="lt-track"></div></div>
+    </div>
+
+    <div class="backdrop" id="backdrop"></div>
+  </div>
+
+  <!-- 모달 -->
+  <div class="modal-root hidden" id="modal-root">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal" id="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modal-title">제목</h3>
+        <button class="icon-btn" id="modal-close" aria-label="닫기">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 토스트 -->
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <!-- 스크립트 (로드 순서 중요) -->
+  <script src="js/storage.js"></script>   <!-- 데이터 계층 + 유틸 -->
+  <script src="js/seed.js"></script>       <!-- KBO 경기/좌석 시드 -->
+  <script src="js/auth.js"></script>       <!-- 회원가입/로그인/데모 -->
+  <script src="js/games.js"></script>      <!-- 경기 검색 + 좌석 현황 -->
+  <script src="js/alerts.js"></script>     <!-- 빈자리 알림 설정 -->
+  <script src="js/monitor.js"></script>    <!-- 실시간 좌석 감시 시뮬레이션 -->
+  <script src="js/feed.js"></script>       <!-- 라이브 피드(레이더/마퀴/ALERT STACK) -->
+  <script src="js/dashboard.js"></script>  <!-- 대시보드 + 알림 기록 -->
+  <script src="js/console.js"></script>    <!-- 로그인 콘솔(부팅/시계/flip/관전모드) -->
+  <script src="js/app.js"></script>        <!-- 라우팅 / 모달 / 초기화 -->
+</body>
+</html>
